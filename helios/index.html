@@ -1058,7 +1058,7 @@ window.__PRELOADED_LS__   = ${JSON.stringify(snapLS)};
 }
 
 /* ── init ── */
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
   const slots = [
     { imgId:'img-nums',      phId:'ph-nums',      loadedId:'loaded-nums',      def:'img/performance.png'  },
     { imgId:'img-curve',     phId:'ph-curve',     loadedId:'loaded-curve',     def:'img/equity-curve.png' },
@@ -1071,7 +1071,16 @@ window.addEventListener('load', () => {
     { imgId:'img-oos-curve', phId:'ph-oos-curve', loadedId:'loaded-oos-curve', def:null },
   ];
 
-  /* ── Si hay snapshot exportado, usarlo directo; si no, cargar desde IndexedDB ── */
+  /* ── Cargar snapshot.txt si existe (versión hosted) ── */
+  try {
+    const r = await fetch('../snapshot.txt', { cache:'no-store' });
+    if (r.ok) {
+      const snap = await r.json();
+      if (snap.helios && Object.keys(snap.helios).length > 0)
+        window.__PRELOADED_IMGS__ = snap.helios;
+    }
+  } catch(e) { /* sin snapshot — modo normal */ }
+
   const SNAP_IMGS = window.__PRELOADED_IMGS__ || {};
   const SNAP_LS   = window.__PRELOADED_LS__  || {};
 

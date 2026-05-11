@@ -1056,10 +1056,17 @@ function updateWFAKPIs() {
 /* ══════════════════════════════════════════════════════
    INICIALIZACIÓN AL CARGAR LA PÁGINA
 ══════════════════════════════════════════════════════ */
-window.addEventListener('load', () => {
-  /* ── Si hay snapshot exportado, pre-cargar en localStorage ── */
-  const SNAP = window.__PRELOADED_LS__ || {};
-  Object.entries(SNAP).forEach(([k,v]) => { try { if(!localStorage.getItem(k)) localStorage.setItem(k,v); } catch(ex){} });
+async function cargarSnapshot() {
+  try {
+    const r = await fetch('../snapshot.txt', { cache:'no-store' });
+    if (!r.ok) return;
+    const snap = await r.json();
+    window.__SNAP_D__ = snap.descartes || {};
+  } catch(e) { /* sin snapshot — modo normal */ }
+}
+
+window.addEventListener('load', async () => {
+  await cargarSnapshot();
 
   // Imágenes regulares (backtest full)
   const slots = [
@@ -1071,10 +1078,11 @@ window.addEventListener('load', () => {
     { imgId:'img-is-curve', phId:'ph-is-curve', loadedId:'loaded-is-curve', def:null },
     { imgId:'img-oos-curve',phId:'ph-oos-curve',loadedId:'loaded-oos-curve',def:null },
   ];
+  const SD = window.__SNAP_D__ || {};
   slots.forEach(({ imgId, phId, loadedId, def }) => {
-    const saved = localStorage.getItem('img_' + imgId);
-    if (saved) {
-      setImg(imgId, phId, loadedId, saved);
+    const src = SD['img_' + imgId] || localStorage.getItem('img_' + imgId);
+    if (src) {
+      setImg(imgId, phId, loadedId, src);
     } else if (def) {
       const t = new Image();
       t.onload = () => setImg(imgId, phId, loadedId, def);
@@ -1082,13 +1090,13 @@ window.addEventListener('load', () => {
     }
   });
 
-  // Imágenes Holdout (IS / OOS) — restaurar imagen Y panel de datos
+  // Imágenes Holdout (IS / OOS)
   ['is', 'oos'].forEach(period => {
     const imgId    = 'img-' + period;
     const phId     = 'ph-'  + period;
     const loadedId = 'loaded-' + period;
     const panelId  = 'panel-'  + period;
-    const savedImg = localStorage.getItem('img_' + imgId);
+    const savedImg = SD['img_' + imgId] || localStorage.getItem('img_' + imgId);
     if (savedImg) {
       setImg(imgId, phId, loadedId, savedImg);
       const panel = document.getElementById(panelId);
@@ -1097,11 +1105,9 @@ window.addEventListener('load', () => {
     }
   });
 
-  // Restaurar KPIs con los datos guardados
   updateKPIs();
 
-  // Restaurar panel WFA si había imagen guardada
-  if (localStorage.getItem('img_img-wfa-sum')) {
+  if (SD['img_img-wfa-sum'] || localStorage.getItem('img_img-wfa-sum')) {
     const panel = document.getElementById('panel-wfa');
     if (panel) { panel.classList.add('visible'); restoreWFAFields(); }
   }

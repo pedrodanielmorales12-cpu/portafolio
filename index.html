@@ -246,11 +246,19 @@ nav {
       <div class="nav-sub">NinjaTrader 8 · Futuros CME · ES / MES / GC</div>
     </div>
   </div>
-  <div style="display:flex;align-items:center;gap:16px;">
+  <div style="display:flex;align-items:center;gap:10px;">
     <div class="nav-live">
       <div class="pulse"></div>
       3 estrategias · 2 en vivo · APEX-568274-01
     </div>
+    <button id="btn-snapshot" onclick="crearSnapshot()" style="
+      display:flex;align-items:center;gap:6px;padding:7px 16px;border-radius:8px;
+      background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);
+      color:var(--green);font-size:12px;font-weight:700;cursor:pointer;
+      font-family:var(--font);transition:all .2s;">
+      <div id="snap-spinner" style="display:none;width:12px;height:12px;border:2px solid rgba(0,229,160,.3);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;"></div>
+      <span id="snap-label">📦 Publicar portafolio</span>
+    </button>
     <a href="admin/index.html" style="display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:600;text-decoration:none;transition:all .2s;" onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'">
       ⚙️ Admin
     </a>
@@ -689,13 +697,94 @@ nav {
 
 <script>
 window.addEventListener('load', () => {
-  // Animate win rate bars
   setTimeout(() => {
     document.querySelectorAll('.wr-fill[data-w]').forEach(bar => {
       bar.style.width = bar.dataset.w + '%';
     });
   }, 200);
 });
+
+/* ── LEER IDB ── */
+function leerIDB(dbName, store, key) {
+  return new Promise(res => {
+    try {
+      const r = indexedDB.open(dbName, 1);
+      r.onerror = () => res(null);
+      r.onupgradeneeded = () => res(null);
+      r.onsuccess = e => {
+        try {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(store)) return res(null);
+          const tx = db.transaction(store, 'readonly');
+          const q  = tx.objectStore(store).get(key);
+          q.onsuccess = () => res(q.result || null);
+          q.onerror   = () => res(null);
+        } catch(ex) { res(null); }
+      };
+    } catch(ex) { res(null); }
+  });
+}
+
+/* ── CREAR SNAPSHOT ── */
+async function crearSnapshot() {
+  const btn = document.getElementById('btn-snapshot');
+  const sp  = document.getElementById('snap-spinner');
+  const lbl = document.getElementById('snap-label');
+  btn.disabled = true; sp.style.display = 'block'; lbl.textContent = 'Recopilando…';
+
+  try {
+    const imgKeys = ['img-nums','img-curve','img-hd1','img-hd2',
+                     'img-wfa-sum','img-is','img-is-curve','img-oos','img-oos-curve'];
+
+    /* ── DESCARTES (localStorage: img_*) ── */
+    lbl.textContent = 'DESCARTES…';
+    const D = {};
+    imgKeys.forEach(k => { const v = localStorage.getItem('img_' + k); if(v) D['img_' + k] = v; });
+    ['holdout_is','holdout_oos','holdout_wfa'].forEach(k => { const v = localStorage.getItem(k); if(v) D[k] = v; });
+
+    /* ── EVOLUTION (localStorage: ev_*) ── */
+    lbl.textContent = 'EVOLUTION…';
+    const E = {};
+    imgKeys.forEach(k => { const v = localStorage.getItem('ev_' + k); if(v) E['ev_' + k] = v; });
+    ['ev_holdout_is','ev_holdout_oos','ev_holdout_wfa'].forEach(k => { const v = localStorage.getItem(k); if(v) E[k] = v; });
+
+    /* ── HELIOS (IndexedDB: helios_imgs) ── */
+    lbl.textContent = 'HELIOS…';
+    const H = {};
+    for (const k of imgKeys) {
+      const v = await leerIDB('helios_imgs', 'imgs', 'he_' + k);
+      if (v) H['he_' + k] = v;
+    }
+
+    /* ── GENERAR snapshot.js ── */
+    const totalImgs = Object.keys(D).length + Object.keys(E).length + Object.keys(H).length;
+    lbl.textContent = `Generando (${totalImgs} imágenes)…`;
+
+    const content = JSON.stringify({
+      generado: new Date().toLocaleString('es'),
+      totalImagenes: totalImgs,
+      descartes: D,
+      evolution: E,
+      helios: H
+    }, null, 0);
+
+    const blob = new Blob([content], { type:'text/plain;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'snapshot.txt';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    lbl.textContent = `✅ Listo — ${totalImgs} imgs exportadas`;
+    setTimeout(() => { lbl.textContent = '📦 Publicar portafolio'; btn.disabled = false; sp.style.display = 'none'; }, 4000);
+
+  } catch(err) {
+    console.error(err);
+    lbl.textContent = '❌ Error'; btn.disabled = false; sp.style.display = 'none';
+    setTimeout(() => { lbl.textContent = '📦 Publicar portafolio'; }, 3000);
+  }
+}
 </script>
+<style>@keyframes spin{to{transform:rotate(360deg);}}</style>
 </body>
 </html>

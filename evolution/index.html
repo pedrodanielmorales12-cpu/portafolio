@@ -893,10 +893,17 @@ function updateWFAKPIs() {
   }
 }
 
-window.addEventListener('load', () => {
-  /* ── Si hay snapshot exportado, pre-cargar en localStorage ── */
-  const SNAP = window.__PRELOADED_LS__ || {};
-  Object.entries(SNAP).forEach(([k,v]) => { try { if(!localStorage.getItem(k)) localStorage.setItem(k,v); } catch(ex){} });
+async function cargarSnapshot() {
+  try {
+    const r = await fetch('../snapshot.txt', { cache:'no-store' });
+    if (!r.ok) return;
+    const snap = await r.json();
+    window.__SNAP_E__ = snap.evolution || {};
+  } catch(e) { /* sin snapshot — modo normal */ }
+}
+
+window.addEventListener('load', async () => {
+  await cargarSnapshot();
 
   const slots = [
     { imgId:'img-nums',   phId:'ph-nums',   loadedId:'loaded-nums',   def:'img/performance.png'      },
@@ -907,19 +914,20 @@ window.addEventListener('load', () => {
     { imgId:'img-hd1',    phId:'ph-hd1',    loadedId:'loaded-hd1',    def:null },
     { imgId:'img-hd2',    phId:'ph-hd2',    loadedId:'loaded-hd2',    def:null },
   ];
+  const SE = window.__SNAP_E__ || {};
   slots.forEach(({ imgId, phId, loadedId, def }) => {
-    const saved = localStorage.getItem('ev_' + imgId);
-    if (saved) { setImg(imgId, phId, loadedId, saved); }
+    const src = SE['ev_' + imgId] || localStorage.getItem('ev_' + imgId);
+    if (src) { setImg(imgId, phId, loadedId, src); }
     else if (def) { const t=new Image(); t.onload=()=>setImg(imgId,phId,loadedId,def); t.src=def+'?t='+Date.now(); }
   });
   ['is','oos'].forEach(period => {
     const imgId='img-'+period, phId='ph-'+period, loadedId='loaded-'+period, panelId='panel-'+period;
-    const savedImg = localStorage.getItem('ev_'+imgId);
+    const savedImg = SE['ev_'+imgId] || localStorage.getItem('ev_'+imgId);
     if (savedImg) { setImg(imgId, phId, loadedId, savedImg); const panel=document.getElementById(panelId); if(panel) panel.classList.add('visible'); restoreDataFields(period); }
   });
   updateKPIs();
 
-  if (localStorage.getItem('ev_img-wfa-sum')) {
+  if (SE['ev_img-wfa-sum'] || localStorage.getItem('ev_img-wfa-sum')) {
     const panel = document.getElementById('panel-wfa');
     if (panel) { panel.classList.add('visible'); restoreWFAFields(); }
   }
